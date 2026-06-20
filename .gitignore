@@ -1,6 +1,46 @@
+# ── Build directories ─────────────────────────────────────────────────────────
 build/
-.cache/
+build_rel/
+build_test/
+build_debug/
+_deps/
+
+# ── CMake generated ───────────────────────────────────────────────────────────
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
+compile_commands.json
+*.cmake
+
+# ── Compiled output ───────────────────────────────────────────────────────────
 *.o
 *.a
 *.so
+*.so.*
 *.out
+*.exe
+*.dylib
+
+# ── Test output ───────────────────────────────────────────────────────────────
+test_logs/
+*.xml
+
+# ── Editor / IDE ──────────────────────────────────────────────────────────────
+.cache/
+.clangd/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── Claude Code ───────────────────────────────────────────────────────────────
+.claude/
+
+# ── Stale drafts (superseded by ofe_session1_code/ofe/nt8/nt_adapter/) ───────
+ofe_session1_code/nt_adapter/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

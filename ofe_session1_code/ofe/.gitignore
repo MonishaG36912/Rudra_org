@@ -1,0 +1,27 @@
+# Build directories
+build/
+build_rel/
+build_test/
+
+# Test output
+test_logs/
+
+# CMake generated
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
+_deps/
+
+# Compiled output
+*.o
+*.a
+*.so
+*.out
+*.exe
+
+# Editor / IDE
+.cache/
+.clangd/
+compile_commands.json
