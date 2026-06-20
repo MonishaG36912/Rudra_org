@@ -80,7 +80,9 @@ void LeeReadyClassifier::classify_inplace(
         );
     } else if (tick.is_quote_update()) {
         update_quote(tick.tick_type, tick.price, state);
-        // Quote updates do not get classified
+        tick.side = TickSide::UNKNOWN;  // quote ticks have no aggressor side
+    } else {
+        tick.side = TickSide::UNKNOWN;
     }
 }
 

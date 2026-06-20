@@ -257,6 +257,15 @@ private:
 
     void push_bar_history(const core::BarRecord& bar);
 
+    // ── Common signal construction helper ─────────────────────────────────
+    // Fills all shared fields of a SignalEvent; callers set type/direction/strength/price.
+    [[nodiscard]] signals::SignalEvent make_signal(
+        signals::SignalType      type,
+        signals::SignalDirection dir,
+        signals::SignalStrength  str,
+        double                   price,
+        int64_t                  detection_ts) const;
+
     // ── Private helpers for Pulse variable scores ──────────────────────────
     [[nodiscard]] float compute_of_score(const core::BarRecord& bar) const noexcept;
     [[nodiscard]] float compute_delta_score(const core::BarRecord& bar, const DeltaState& d) const noexcept;

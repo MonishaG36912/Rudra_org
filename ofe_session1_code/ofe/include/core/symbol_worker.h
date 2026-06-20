@@ -27,29 +27,27 @@
 #include <functional>
 #include <thread>
 #include <atomic>
+#include <vector>
 #include "tick_record.h"
 #include "ring_buffer.h"
 #include "bar_types.h"
 #include "lee_ready.h"
+#include "../config/engine_config.h"
+#include "../analytics/delta_engine.h"
 
 namespace ofe {
+
+namespace analytics {
+class VolumeProfileEngine;
+class VwapEngine;
+class SignalDetector;
+} // namespace analytics
+
 namespace core {
 
 // Forward declarations
 class BarEngine;
 class EventBus;
-
-namespace analytics {
-class DeltaEngine;
-class VolumeProfileEngine;
-class VwapEngine;
-class SignalDetector;
-}
-
-namespace config {
-struct EngineConfig;
-struct IndicatorConfig;
-}
 
 // ── Worker state ──────────────────────────────────────────────────────────────
 
@@ -229,6 +227,10 @@ private:
     // ── Mutable state (accessed only from worker thread) ─────────────────
     config::IndicatorConfig                   indicator_config_;
     WorkerStats                               stats_{};
+    analytics::DeltaState                     delta_state_{};
+    int64_t                                   session_open_ts_ns_{0};
+    std::vector<signals::ImbalanceZone>       active_zones_{};
+    BarSize                                   default_bar_size_{BarType::TIME, 300};
 };
 
 } // namespace core

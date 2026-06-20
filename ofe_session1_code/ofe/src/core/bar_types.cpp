@@ -1,6 +1,22 @@
 /**
  * bar_types.cpp
  * BarRecord, PriceLevelRecord, and BarSize helper implementations.
+ *
+ * Key types:
+ *   PriceLevelRecord — one price level in a footprint bar:
+ *     price, bid_vol, ask_vol, total_vol, delta, is_buy_imbalance, is_sell_imbalance,
+ *     is_poc (bar-level POC), is_cot (Center-of-Trade), is_zero_print.
+ *     Used by BarRecord::price_levels[] and serialised in nt_bridge_server bar_close frames.
+ *
+ *   BarRecord — one completed bar:
+ *     OHLCV fields + bar_open_ts_ns / bar_close_ts_ns (with bar_ prefix).
+ *     poc_price = price of the bar-level Point-of-Control (argmax total_vol).
+ *     price_levels: sorted vector of PriceLevelRecord (sorted ascending by price).
+ *
+ *   BarSize — encodes bar type (TIME/RANGE/VOLUME) and size value.
+ *     BarSizeType::TIME + period_seconds=60 → 60-second bars.
+ *     BarSizeType::RANGE + ticks → range bars closing on N-tick moves.
+ *     BarSizeType::VOLUME + contracts → volume bars closing at threshold.
  */
 
 #include "core/bar_types.h"

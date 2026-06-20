@@ -184,15 +184,15 @@ private:
 //   LOG_WARN ("module_name", "Slow tick: latency={}us", latency_us);
 //   LOG_ERROR("module_name", "Feed disconnected: provider={}", provider_name);
 
-#define OFE_LOG(level, module, ...)                                     \
+#define OFE_LOG(_ofe_lvl, _ofe_mod, ...)                                \
     do {                                                                 \
-        if (::ofe::util::Logger::is_enabled(level)) {                   \
+        if (::ofe::util::Logger::is_enabled(_ofe_lvl)) {               \
             using namespace std::chrono;                                 \
             ::ofe::util::LogRecord _rec;                                 \
             _rec.timestamp_ns = duration_cast<nanoseconds>(             \
                 system_clock::now().time_since_epoch()).count();         \
-            _rec.level    = level;                                       \
-            _rec.module   = (module);                                    \
+            _rec.level    = (_ofe_lvl);                                  \
+            _rec.module   = (_ofe_mod);                                  \
             _rec.message  = ::ofe::util::Logger::format(__VA_ARGS__);   \
             _rec.thread_id = static_cast<uint64_t>(                     \
                 std::hash<std::thread::id>{}(std::this_thread::get_id())); \

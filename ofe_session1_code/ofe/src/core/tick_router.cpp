@@ -14,6 +14,7 @@
 #include <functional>
 #include <cctype>
 #include <algorithm>
+#include <mutex>
 #include <stdexcept>
 
 namespace ofe {

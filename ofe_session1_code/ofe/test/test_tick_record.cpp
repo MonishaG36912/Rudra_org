@@ -27,8 +27,6 @@ TEST(TickRecord, Alignment64Bytes)
 
 TEST(TickRecord, MakeTradePopulatesFields)
 {
-    const uint32_t     symbol_id = TickRouter_like_hash("ES");
-    // We just use a known value
     const uint32_t     sid       = 0xABCD1234u;
     const double       price     = 4502.25;
     const int64_t      volume    = 250;

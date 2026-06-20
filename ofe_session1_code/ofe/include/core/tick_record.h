@@ -44,11 +44,12 @@ enum class TickType : uint8_t {
  * Used for logging, audit, and failover tracking.
  */
 enum class DataProvider : uint8_t {
-    KINETICK = 0,
-    IQFEED   = 1,
-    ESIGNAL  = 2,
-    REPLAY   = 3,  ///< Historical replay from file — used in backtesting
-    SYNTHETIC = 4  ///< Synthetic tick generator — used in stress tests
+    KINETICK  = 0,
+    IQFEED    = 1,
+    ESIGNAL   = 2,
+    REPLAY    = 3,  ///< Historical replay from file — used in backtesting
+    SYNTHETIC = 4,  ///< Synthetic tick generator — used in stress tests
+    COINBASE  = 5   ///< Coinbase Advanced Trade WebSocket (free public feed)
 };
 
 // ── Universal Tick Record ────────────────────────────────────────────────────
@@ -102,7 +103,7 @@ struct alignas(64) UniversalTickRecord {
         int64_t  exchange_ts_ns,
         uint64_t seq_no,
         DataProvider provider = DataProvider::IQFEED
-    );
+    ) noexcept;
 
     /// Returns true if this tick should be accumulated into bid/ask volume buckets
     [[nodiscard]] bool is_accumulatable() const noexcept {

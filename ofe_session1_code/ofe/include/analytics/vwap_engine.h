@@ -15,6 +15,7 @@
 #include <vector>
 #include <unordered_map>
 #include <string>
+#include <optional>
 #include "../core/tick_record.h"
 #include "../signals/signal_types.h"
 

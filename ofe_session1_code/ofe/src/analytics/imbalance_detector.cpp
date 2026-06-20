@@ -370,7 +370,7 @@ std::vector<signals::SignalEvent> ImbalanceDetector::detect_absorption(
     std::vector<signals::SignalEvent> result;
 
     for (const auto& lvl : bar.price_levels) {
-        if (lvl.total_vol < static_cast<int32_t>(config_.absorption_vol_threshold))
+        if (lvl.total_vol < static_cast<int32_t>(config_.absorption_vol_thresh))
             continue;
 
         const float delta_ratio =
