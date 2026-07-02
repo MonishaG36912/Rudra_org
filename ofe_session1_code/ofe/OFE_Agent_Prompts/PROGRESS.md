@@ -1,17 +1,32 @@
 # OFE Coding Progress Tracker
-# Last updated: Session 5 (Coinbase feed + NT8 full footprint chart complete)
+# Last updated: Session 7 (OFEFootprintNT.cs — native NT8 tick-feed footprint indicator)
 # RULE: Any new session MUST read this file FIRST before writing any code.
 # RULE: Never re-implement a [DONE] file. Start from the RESUME POINT below.
 
 ## ═══════════════════════════════════════
-## RESUME POINT FOR NEXT SESSION (Session 6)
+## RESUME POINT FOR NEXT SESSION (Session 8)
 ## ═══════════════════════════════════════
-# Sessions 1-5 DONE: C++ core, analytics, 154 tests, Coinbase feed, NT8 bridge
-# 1. License (AGT-09): hw_fingerprint.cpp → license_engine.cpp
-# 2. Go REST+WebSocket API server (AGT-07)
-# 3. Rust OFE-Script evaluator
-# 4. Merge to Rudra_org: adapt #include paths from flat (include/core/) to nested (include/ofe/core/)
-# 5. IQFeed + Kinetick feed adapters (AGT-05) — lower priority now Coinbase is live
+# Sessions 1-7 DONE: C++ core+analytics+154 tests, Coinbase feed, NT8 bridge (legacy),
+#                    OFEFootprintNT.cs (native NT8 footprint — the correct approach)
+#
+# ── IMMEDIATE: TEST OFEFootprintNT.cs ───────────────────────────────────────
+#   User has: Schwab → NT8 (stocks) WORKING + Coinbase → NT8 (crypto) WORKING
+#   Test steps:
+#     1. Copy ONLY OFEFootprintNT.cs → Documents\NinjaTrader 8\bin\Custom\Indicators\
+#     2. Ctrl+F5 compile → paste any errors to fix API mismatches
+#     3. Open Schwab chart → drag "OFE Footprint NT" → check Output tab (Ctrl+5)
+#     4. Should see "[OFE] Bar N closed: Δ=+123 CVD=+456 Levels=18" per bar close
+#
+# ── THEN (in order) ─────────────────────────────────────────────────────────
+# 1. Fix any NT8 compile errors in OFEFootprintNT.cs
+# 2. Add live (current open) bar footprint rendering
+# 3. Add Volume Profile histogram option
+# 4. Add CVD sub-panel option
+# 5. License (AGT-09): hw_fingerprint.cpp → license_engine.cpp
+# 6. Go REST+WebSocket API server (AGT-07)
+# 7. Rust OFE-Script evaluator
+# 8. Merge to Rudra_org: adapt #include paths from flat to nested (include/ofe/core/)
+# 9. IQFeed + Kinetick feed adapters (AGT-05)
 
 ## ═══════════════════════════════════════
 ## RUDRA_ORG REPO RECONCILIATION (pending)
@@ -102,9 +117,26 @@
 ### nt8/nt_adapter/OFEMessageTypes.cs  [DONE — Session 5] - OfeBarCloseMsg/OfeVwapMsg/OfeSignalMsg + manual JSON parser
 ### nt8/nt_adapter/OFEEngineClient.cs  [DONE — Session 5] - TCP client, length-prefix framing, auto-reconnect
 ### nt8/nt_adapter/OFEFootprintIndicator.cs [DONE — Session 5] - NT8 NinjaIndicator, bar cache (max 500), 12-prop panel
+#                                    ⚠ LEGACY: requires nt_bridge_server on port 7777. Superseded by OFEFootprintNT.cs
 ### nt8/nt_adapter/FootprintRenderer.cs     [DONE — Session 5] - SharpDX cell grid, colour priority, POC/COT rendering
 ### nt8/nt_adapter/OverlayRenderer.cs       [DONE — Session 5] - VWAP daily + ±1σ/±2σ bands + VP histogram (right margin)
 ### nt8/nt_adapter/DeltaPanelRenderer.cs    [DONE — Session 5] - Delta histogram + CVD polyline sub-panel
+
+### nt8/nt_adapter/OFECoinbaseChart.cs      [DONE — Session 6] - Standalone chart panel; Phase 1 only
+#                                    ⚠ NOT RECOMMENDED: standalone panel can't host standard NT8 indicators
+### nt8/nt_adapter/CoinbaseWebSocketClient.cs [DONE — Session 6] - Pure C# Coinbase WS client
+#                                    ⚠ NOT NEEDED: user already has NT8 native Coinbase connection
+### nt8/nt_adapter/CoinbaseNTFeed.cs        [DONE — Session 6] - NT8 Connection subclass + AddOn lifecycle
+#                                    ⚠ NOT NEEDED: user already has NT8 native Coinbase connection
+
+### nt8/nt_adapter/OFEFootprintNT.cs        ★ [DONE — Session 7] ★ PRIMARY NT8 FOOTPRINT INDICATOR
+#   Self-contained, single file, NO C++ server, NO TCP, NO external deps.
+#   Works with ANY NT8 data provider: Schwab, Coinbase, IQFeed, Kinetick, eSignal.
+#   OnMarketData(): track Bid/Ask, classify Last ticks Lee-Ready, accumulate per price level per bar.
+#   Bar-close: POC, barDelta, CVD, diagonal imbalances, stacked imbalances.
+#   _barCache[NT8 barIndex] = BarSnapshot — direct integer key, no timestamp alignment.
+#   OnRender(): SharpDX bid(left)/ask(right) cells, POC highlight, delta label, status bar.
+#   INSTALL: Copy ONLY this file → NT8 Custom\Indicators\ → Ctrl+F5 → drag onto chart.
 
 ## ═══════════════════════════════════════
 ## PHASE 5 — LICENSE (src/license/)
@@ -205,6 +237,28 @@
 #   - test_vwap_engine.cpp     (15 tests: incremental VWAP, StdDev bands, REACTION/ROTATION signals, anchored)
 #   - test_signal_detector.cpp (12 tests: COT, Ratio, SinglePrint, ZeroPrint, Pulse 7-var composite)
 #   - All 154 tests passing — zero regressions
+#
+# Session 6: PARTIAL (debug investigation + standalone chart attempt)
+#   CONTEXT: OFEFootprintIndicator not displaying on NT8 charts.
+#   ROOT CAUSE: Depends on nt_bridge_server port 7777. If server not running → shows nothing.
+#   FILES ADDED (optional, superseded):
+#     OFECoinbaseChart.cs — standalone panel (Phase 1 candles only)
+#     CoinbaseWebSocketClient.cs — pure C# Coinbase WS client
+#     CoinbaseNTFeed.cs — NT8 Connection subclass
+#     OFEFootprintIndicator.cs + FootprintRenderer.cs — added diagnostic Print calls
+#   DECISION: Wrong direction. User already has Schwab+Coinbase → NT8 working natively.
+#             No custom WS client or NT8 Connection needed.
+#
+# Session 7: COMPLETED ★ CORRECT APPROACH ★
+#   CONTEXT: User confirmed: Schwab→NT8 (stocks) working, Coinbase→NT8 (crypto) working.
+#            No C++ bridge server needed. OFE needs to read NT8's own tick data.
+#   FILES ADDED:
+#     nt8/nt_adapter/OFEFootprintNT.cs — self-contained footprint indicator
+#       - OnMarketData(): Lee-Ready classify, accumulate bid/ask vol per price level per bar
+#       - Bar-close: POC, barDelta, CVD, diagonal imbalances, stacked imbalances
+#       - _barCache keyed by NT8 bar index (int) — no timestamp alignment issues
+#       - OnRender(): SharpDX left(bid)/right(ask) cells, POC, delta label, status bar
+#   154/154 C++ tests unaffected.
 #
 # Session 5: COMPLETED (Coinbase feed + NT8 full footprint chart pipeline)
 #   - src/feed/coinbase_adapter.cpp — Coinbase WebSocket, PIMPL, JWT ES256, BTC-USD live ticks

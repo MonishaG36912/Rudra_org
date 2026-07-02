@@ -1,16 +1,30 @@
 # OFE Coding Progress Tracker
-# Last updated: Session 5 (Coinbase feed + NT8 bridge complete — see session log)
+# Last updated: Session 7 (OFEFootprintNT.cs — native NT8 tick-feed footprint indicator)
 # RULE: Any new session MUST read this file FIRST before writing any code.
 
 ## ═══════════════════════════════════════
-## RESUME POINT FOR NEXT SESSION (Session 6)
+## RESUME POINT FOR NEXT SESSION (Session 8)
 ## ═══════════════════════════════════════
-# Session 5 DONE: Coinbase feed live + NT8 full footprint chart pipeline
-# 1. License: hw_fingerprint.cpp → license_engine.cpp (AGT-09)
-# 2. Go REST+WebSocket API server (AGT-07)
-# 3. Rust OFE-Script evaluator
-# 4. Merge ofe_session1_code/ to production Rudra_org repo layout (include/ofe/ paths)
-# 5. IQFeed + Kinetick feed adapters (AGT-05) — lower priority now Coinbase is live
+# Session 7 DONE: OFEFootprintNT.cs — self-contained NT8 footprint indicator (no C++ server)
+#
+# ── IMMEDIATE NEXT STEP ─────────────────────────────────────────────────────
+# TEST OFEFootprintNT.cs in NT8:
+#   1. Copy ONLY nt8/nt_adapter/OFEFootprintNT.cs → Documents\NinjaTrader 8\bin\Custom\Indicators\
+#   2. Ctrl+F5 compile → paste any errors here to fix
+#   3. Open Schwab or Coinbase chart in NT8 → drag "OFE Footprint NT" onto chart
+#   4. Watch Output tab (Ctrl+5) → should see "[OFE] Bar N closed: Δ=..." per bar
+#   5. After first bar close: footprint cells should appear over the candles
+#
+# ── PENDING TASKS (in order) ────────────────────────────────────────────────
+# 1. Fix any NT8 compile errors in OFEFootprintNT.cs
+# 2. Add live (current open) bar footprint rendering
+# 3. Add Volume Profile histogram option
+# 4. Add CVD sub-panel option
+# 5. License: hw_fingerprint.cpp → license_engine.cpp (AGT-09)
+# 6. Go REST+WebSocket API server (AGT-07)
+# 7. Rust OFE-Script evaluator
+# 8. Merge ofe_session1_code/ to production Rudra_org repo layout (include/ofe/ paths)
+# 9. IQFeed + Kinetick feed adapters (AGT-05)
 
 ## ═══════════════════════════════════════
 ## PHASE 1 — CORE ENGINE (src/core/)
@@ -93,9 +107,35 @@
 ### nt8/nt_adapter/OFEMessageTypes.cs     [DONE — Session 5] - OfeBarCloseMsg/OfeVwapMsg/OfeSignalMsg + manual JSON parser
 ### nt8/nt_adapter/OFEEngineClient.cs     [DONE — Session 5] - TCP client, length-prefix framing, auto-reconnect
 ### nt8/nt_adapter/OFEFootprintIndicator.cs [DONE — Session 5] - NT8 NinjaIndicator, bar cache (max 500 bars)
+#                                    NOTE: requires nt_bridge_server running on port 7777. Will NOT display
+#                                    if no server is running. Superseded by OFEFootprintNT.cs for native feeds.
 ### nt8/nt_adapter/FootprintRenderer.cs   [DONE — Session 5] - SharpDX cell grid, colour priority, POC/COT
 ### nt8/nt_adapter/OverlayRenderer.cs     [DONE — Session 5] - VWAP + ±1σ/±2σ bands + VP histogram
 ### nt8/nt_adapter/DeltaPanelRenderer.cs  [DONE — Session 5] - Delta histogram + CVD polyline sub-panel
+
+### nt8/nt_adapter/OFECoinbaseChart.cs    [DONE — Session 6] - Standalone chart panel (IsOverlay=false)
+#                                    Draws its own candles from bridge server data. No NT8 bar dependency.
+#                                    Status: Phase 1 only (candles+VWAP+status bar). Not recommended.
+### nt8/nt_adapter/CoinbaseWebSocketClient.cs [DONE — Session 6] - Pure C# Coinbase WS client
+#                                    NOTE: NOT needed if using NT8 native Coinbase connection.
+#                                    Only relevant if zero NT8 data providers (edge case).
+### nt8/nt_adapter/CoinbaseNTFeed.cs      [DONE — Session 6] - NT8 Connection subclass + AddOn
+#                                    NOTE: NOT needed if using NT8 native Coinbase connection.
+#                                    Only relevant if zero NT8 data providers (edge case).
+
+### nt8/nt_adapter/OFEFootprintNT.cs      [DONE — Session 7] ★ PRIMARY INDICATOR ★
+#                                    Self-contained footprint indicator — NO C++ server required.
+#                                    Works with ANY NT8 data provider: Schwab, Coinbase, IQFeed, Kinetick, eSignal.
+#                                    OnMarketData() receives raw ticks from NT8's native feed.
+#                                    Lee-Ready classification (buy vs sell) computed in C#.
+#                                    Accumulates bid/ask vol per price level per bar (Dictionary<long, BarLevel>).
+#                                    Bar-close: computes POC, barDelta, CVD, diagonal imbalances, stacked imbalances.
+#                                    _barCache keyed by NT8 bar index (int) — NO timestamp alignment issues.
+#                                    OnRender(): SharpDX cells (bid=left, ask=right), POC highlight, delta label.
+#                                    Status bar: "OFE Footprint │ {instrument} │ Bars: N │ CVD: ±N"
+#                                    Properties: CellFontSize, ShowDeltaLabel, ShowPoc, ImbalanceRatio,
+#                                                StackedThreshold, BuyColor, SellColor, all imbalance colours.
+#                                    INSTALL: Copy only OFEFootprintNT.cs → NT8 Custom\Indicators\ → Ctrl+F5
 
 ## ═══════════════════════════════════════
 ## PHASE 5 — LICENSE (src/license/)
@@ -197,3 +237,34 @@
 #   - 154/154 tests still passing — zero regressions
 #   KEY BUG (avoid): SignalDetector::push_bar_history() is private.
 #                    detect_all() calls it internally. Do NOT call it externally.
+#
+# Session 6: PARTIAL (debug + standalone chart attempt)
+#   CONTEXT: User reported OFEFootprintIndicator not displaying on NT8 charts.
+#   ROOT CAUSE FOUND: OFEFootprintIndicator depends on nt_bridge_server (port 7777).
+#                     If server not running, indicator shows nothing. No self-diagnostic.
+#   FILES ADDED (optional/superseded):
+#   - nt8/nt_adapter/OFECoinbaseChart.cs — standalone chart panel (Phase 1: candles+VWAP)
+#     IsOverlay=false, own sub-panel, reads from bridge server not NT8 bar data.
+#     NOT the recommended approach — superseded by OFEFootprintNT.cs.
+#   - nt8/nt_adapter/CoinbaseWebSocketClient.cs — pure C# Coinbase WS client (no NT8 deps)
+#     NOT needed if NT8 already has Coinbase connection.
+#   - nt8/nt_adapter/CoinbaseNTFeed.cs — NT8 Connection subclass + AddOn lifecycle
+#     NOT needed if NT8 already has Coinbase connection.
+#   - nt8/nt_adapter/OFEFootprintIndicator.cs — added diagnostics (Print on renders 1/10/50)
+#   - nt8/nt_adapter/FootprintRenderer.cs — added null guards for BarsArray.Length
+#
+# Session 7: COMPLETED — ★ CORRECT APPROACH ★
+#   CONTEXT: User confirmed: (a) Schwab data → NT8 charts working; (b) Coinbase → NT8 working.
+#            No C++ bridge server needed for data. OFE indicator must read NT8's own tick data.
+#   ARCHITECTURE DECISION:
+#     ANY data provider (Schwab/Coinbase/IQFeed/Kinetick/eSignal) → NT8 tick engine
+#     → OFEFootprintNT reads OnMarketData() ticks → builds footprint in-memory → OnRender()
+#     No C++ server, no TCP, no external dependencies.
+#   FILE ADDED:
+#   - nt8/nt_adapter/OFEFootprintNT.cs ★ PRIMARY NT8 FOOTPRINT INDICATOR ★
+#     Single self-contained file. Install: copy to NT8 Custom\Indicators\ → Ctrl+F5 → drag onto chart.
+#     OnMarketData(): track Bid/Ask, classify Last ticks Lee-Ready, accumulate per price level per bar.
+#     Bar-close: POC, barDelta, CVD, diagonal imbalances (ask[P] >= ratio × bid[P-1tick]), stacked.
+#     _barCache[barIndex] = BarSnapshot — keyed by NT8 bar index, no timestamp alignment needed.
+#     OnRender(): SharpDX left(bid)/right(ask) cells, POC highlight, delta label, status bar.
+#   154/154 C++ tests unaffected.

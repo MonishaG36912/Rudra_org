@@ -1,8 +1,8 @@
 # AGT-06 — NinjaTrader Agent
-# Role: NT8 C# AddOn — footprint chart renderer, indicators, TCP bridge to OFE engine
-# Status: SESSION 5 COMPLETE — all 6 C# files + C++ bridge server done; rendering tests pending
-# When to use: Extending NT8 rendering, adding Kinetick mode, Zone rendering (Layer 3)
-# Output: nt_adapter/*.cs files + tools/nt_bridge_server.cpp
+# Role: NT8 C# indicator — native footprint chart reading from any NT8 data provider
+# Status: SESSION 7 COMPLETE — OFEFootprintNT.cs done; pending: NT8 compile test
+# When to use: Extending NT8 footprint rendering, debugging compile errors, adding VP/CVD panels
+# Output: nt_adapter/OFEFootprintNT.cs (primary); legacy bridge files in nt_adapter/ for reference
 
 ## FIRST ACTION — READ PROGRESS.md
 
@@ -10,72 +10,109 @@
 
 You are AGT-06, the NinjaTrader Agent for the Order Flow Engine project.
 
+## ★ CRITICAL ARCHITECTURE DECISION (Session 7) ★
+
+The user has MULTIPLE NT8 data providers already working:
+- Schwab API → NT8 → stock candlestick charts (working)
+- Coinbase → NT8 → crypto candlestick charts (working)
+- IQFeed, Kinetick, eSignal → will work similarly (no custom code needed)
+
+**The C++ nt_bridge_server is NOT required for NT8 footprint.**
+**NT8 already receives tick data from brokers/providers via its native mechanism.**
+**OFEFootprintNT.cs reads from NT8's own OnMarketData() — works with any provider.**
+
 ## CURRENT STATUS
 
-| File | Status |
-|------|--------|
-| `nt_adapter/OFEMessageTypes.cs`      | [DONE — Session 5] — message structs, enums, manual JSON parser |
-| `nt_adapter/OFEEngineClient.cs`      | [DONE — Session 5] — TCP client, length-prefix framing, auto-reconnect |
-| `nt_adapter/OFEFootprintIndicator.cs`| [DONE — Session 5] — NT8 NinjaIndicator, bar cache (max 500 bars), property panel |
-| `nt_adapter/FootprintRenderer.cs`    | [DONE — Session 5] — SharpDX cell grid, colour priority, POC/COT/zero-print |
-| `nt_adapter/OverlayRenderer.cs`      | [DONE — Session 5] — VWAP lines + bands, VP histogram, signal arrows |
-| `nt_adapter/DeltaPanelRenderer.cs`   | [DONE — Session 5] — delta histogram, CVD polyline, zero-line |
-| `tools/nt_bridge_server.cpp`         | [DONE — Session 5] — C++ TCP server: all 6 engines → TCP:7777, length-prefix JSON |
-| `nt8/OFEAnalytics.cs`               | [DONE — Session 5] — simple VWAP/bands overlay on port 9000 (newline-JSON, no footprint) |
+| File | Status | Notes |
+|------|--------|-------|
+| `nt_adapter/OFEFootprintNT.cs`       | ★ [DONE — Session 7] ★ PRIMARY INDICATOR | Self-contained, no C++ server |
+| `nt_adapter/OFEMessageTypes.cs`      | [DONE — Session 5] — legacy, bridge server only | Not needed for OFEFootprintNT |
+| `nt_adapter/OFEEngineClient.cs`      | [DONE — Session 5] — legacy, bridge server only | Not needed for OFEFootprintNT |
+| `nt_adapter/OFEFootprintIndicator.cs`| [DONE — Session 5] — LEGACY, requires bridge server port 7777 | Superseded |
+| `nt_adapter/FootprintRenderer.cs`    | [DONE — Session 5] — legacy renderer for bridge server indicator | Not needed for OFEFootprintNT |
+| `nt_adapter/OverlayRenderer.cs`      | [DONE — Session 5] — legacy VWAP/VP overlay | Not needed for OFEFootprintNT |
+| `nt_adapter/DeltaPanelRenderer.cs`   | [DONE — Session 5] — legacy delta panel | Not needed for OFEFootprintNT |
+| `nt_adapter/OFECoinbaseChart.cs`     | [DONE — Session 6] — standalone chart panel | Superseded by OFEFootprintNT |
+| `nt_adapter/CoinbaseWebSocketClient.cs` | [DONE — Session 6] — optional | Not needed; user has native feeds |
+| `nt_adapter/CoinbaseNTFeed.cs`       | [DONE — Session 6] — optional | Not needed; user has native feeds |
+| `tools/nt_bridge_server.cpp`         | [DONE — Session 5] — C++ TCP server | For future advanced analytics only |
+| `nt8/OFEAnalytics.cs`               | [DONE — Session 5] — simple VWAP overlay | Legacy |
 
-## ARCHITECTURE
+## ARCHITECTURE (Session 7 — CORRECT)
+
+```
+Any data provider (Schwab / Coinbase / IQFeed / Kinetick / eSignal)
+         │
+         ▼  (NT8 native data connection — no custom code needed)
+NinjaTrader 8 bar engine
+         │
+         ▼
+OFEFootprintNT.cs (NinjaIndicator, IsOverlay=true)
+    OnMarketData() ──► accumulate bid/ask vol per price level per bar
+    OnBarUpdate()  ──► detect bar change → CloseBar() → store BarSnapshot
+    OnRender()     ──► SharpDX footprint cells over NT8's own candles
+```
+
+## OFEFootprintNT.cs — KEY IMPLEMENTATION DETAILS
+
+### Tick classification (Lee-Ready in C#)
+```csharp
+if (e.MarketDataType == MarketDataType.Bid)  { _lastBid = e.Price; return; }
+if (e.MarketDataType == MarketDataType.Ask)  { _lastAsk = e.Price; return; }
+// MarketDataType.Last:
+bool isBuy = (e.Price >= _lastAsk) ? true
+           : (e.Price <= _lastBid) ? false
+           : (e.Price >= _prevTradePrice);   // tick-test fallback
+```
+
+### Bar-close detection (in OnMarketData)
+```csharp
+if (CurrentBar != _accumBarIndex) {
+    if (_accumBarIndex >= 0) CloseBar(_accumBarIndex);
+    _accumLevels.Clear();
+    _accumBarIndex = CurrentBar;
+}
+```
+
+### Price level key (float-safe)
+```csharp
+long priceKey = (long)Math.Round(e.Price / tickSize);
+```
+
+### Bar cache key = NT8 bar index (int)
+No timestamp alignment needed. `_barCache[barIdx]` maps directly to NT8's bar.
+
+### Imbalance formula (same as C++ engine)
+Buy imbalance: `ask_vol[P] >= ratio × bid_vol[P - 1_tick]`
+Stacked: 3+ consecutive same-direction imbalances (configurable via StackedThreshold)
+
+### Installation
+1. Copy ONLY `OFEFootprintNT.cs` → `Documents\NinjaTrader 8\bin\Custom\Indicators\`
+2. Ctrl+F5 to compile
+3. Open any chart with a working data provider
+4. Drag "OFE Footprint NT" onto chart
+5. Check Output tab (Ctrl+5): `[OFE] Bar N closed: Δ=+123 CVD=+456 Levels=18`
+
+## LEGACY ARCHITECTURE (Sessions 5-6 — for reference only)
 
 ```
 Coinbase WebSocket
   └── tools/nt_bridge_server.cpp  (C++ — runs on trading server)
-        ├── CoinbaseAdapter         — live ticks from wss://
-        ├── BarEngine               — 60s TIME bars
-        ├── DeltaEngine             — bar_delta, CVD
-        ├── VwapEngine              — VWAP + ±1σ/±2σ (10Hz rate-limit on vwap frames)
-        ├── VolumeProfileEngine     — session POC, VAH, VAL, shape
-        ├── ImbalanceDetector       — buy/sell imbalance per price level
-        ├── SignalDetector          — Pulse, Turns, Ratio, SinglePrints, MarketSweep, POCSlingshot
-        └── NtFramedBroadcaster    — TCP:7777, 4-byte LE length-prefix JSON
+        ├── 6 analytics engines → TCP:7777, 4-byte LE length-prefix JSON
+        └── NtFramedBroadcaster
 
 NinjaTrader 8 workspace
-  └── OFEFootprintIndicator (NinjaIndicator)
+  └── OFEFootprintIndicator (NinjaIndicator) [LEGACY]
         ├── OFEEngineClient.cs    — TCP client to C++ engine (localhost:7777)
         ├── OFEMessageTypes.cs    — shared structs and manual JSON parser
-        ├── FootprintRenderer.cs  — cell grid, colours, numbers (SharpDX/Direct2D)
-        ├── OverlayRenderer.cs    — VWAP, VP histogram, zones, signal arrows
+        ├── FootprintRenderer.cs  — cell grid, colours, numbers
+        ├── OverlayRenderer.cs    — VWAP, VP histogram, zones
         └── DeltaPanelRenderer.cs — delta bar + CVD sub-panel
 ```
+**WHY NOT USED:** If nt_bridge_server not running → indicator shows nothing (no error shown to user).
+Also only worked for Coinbase BTC-USD; not generic across data providers.
 
-## FEED MODES (critical design decision)
-
-### Mode A: Coinbase (default)
-```
-Coinbase WebSocket ──── OFE Engine (C++) ──── TCP port 7777 ──── NT AddOn
-                        (has own feed)          bar_close/vwap/    (render only)
-                                                signal events
-```
-- OFE engine gets tick data directly from Coinbase WebSocket (CoinbaseAdapter)
-- NT AddOn does NOT call `OnMarketData()` → NO tick forwarding
-- NT AddOn sends only `subscribe` messages to register the symbol with the engine
-- NT AddOn receives: `bar_close`, `vwap`, `signal` events for rendering
-
-### Mode B: Kinetick
-```
-Kinetick ── NT8 ── OFEFootprintIndicator.OnMarketData() ──── TCP port 7777 ──── OFE Engine
-                        (forwards every tick)               (Lee-Ready classify,
-                                                            accumulate, detect)
-```
-- NT8 receives ticks from Kinetick via `OnMarketData()`
-- NT AddOn forwards each tick as a `tick` JSON message to OFE engine
-- OFE engine classifies (Lee-Ready), accumulates, produces bar_close/signal events
-- NT AddOn receives: same events as Mode A for rendering
-
-### Switching modes
-Set `FeedMode` in the indicator property panel:
-```
-Connection → Feed Mode → "Coinbase" or "Kinetick"
-```
-When `FeedMode = Coinbase` the NT AddOn automatically skips all tick forwarding.
+## FEED MODES (Session 7 — simplified)
 
 ## TCP PROTOCOL (OFE Engine ↔ NT AddOn, port 7777)
 

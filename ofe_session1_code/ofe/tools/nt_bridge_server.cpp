@@ -42,6 +42,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -185,6 +186,14 @@ public:
     int  client_count() const { std::lock_guard<std::mutex> lk(mu_); return static_cast<int>(clients_.size()); }
     int  port()         const { return port_; }
 
+    // Store a bar_close JSON in the replay history (called from main on every bar close).
+    void store_bar(const std::string& json) {
+        std::lock_guard<std::mutex> lk(hist_mu_);
+        bar_history_.push_back(json);
+        if (bar_history_.size() > 200)
+            bar_history_.pop_front();
+    }
+
     void stop() {
         running_ = false;
         SOCK_CLOSE(server_fd_);
@@ -214,6 +223,14 @@ private:
             int nodelay = 1;
             ::setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY,
                          reinterpret_cast<const char*>(&nodelay), sizeof(nodelay));
+
+            // Replay buffered bar history to this client before it joins the live feed.
+            // Take a snapshot to avoid holding hist_mu_ during sends.
+            std::deque<std::string> snapshot;
+            { std::lock_guard<std::mutex> lk(hist_mu_); snapshot = bar_history_; }
+            for (const auto& json : snapshot) send_frame(cfd, json);
+            std::printf("[NT] fd=%d: replayed %zu bars\n",
+                        static_cast<int>(cfd), snapshot.size());
 
             { std::lock_guard<std::mutex> lk(mu_); clients_.push_back(cfd); }
             std::printf("[NT] Client connected from %s (fd=%d); total=%d\n",
@@ -262,6 +279,18 @@ private:
         std::printf("[NT] fd=%d reader thread exited\n", static_cast<int>(fd));
     }
 
+    // Send a single framed JSON to one socket (length-prefix + payload).
+    static void send_frame(socket_t fd, const std::string& json) {
+        const uint32_t len = static_cast<uint32_t>(json.size());
+        char hdr[4];
+        hdr[0] = static_cast<char>( len        & 0xFF);
+        hdr[1] = static_cast<char>((len >>  8) & 0xFF);
+        hdr[2] = static_cast<char>((len >> 16) & 0xFF);
+        hdr[3] = static_cast<char>((len >> 24) & 0xFF);
+        ::send(fd, hdr,            4,                          MSG_NOSIGNAL);
+        ::send(fd, json.data(), static_cast<int>(json.size()), MSG_NOSIGNAL);
+    }
+
     static int recv_all(socket_t fd, uint8_t* buf, int needed) {
         int got = 0;
         while (got < needed) {
@@ -280,6 +309,9 @@ private:
     std::thread              accept_thread_;
     std::vector<std::thread> reader_threads_;
     std::atomic<bool>        running_{false};
+
+    std::deque<std::string>  bar_history_;   // last 200 bar_close JSON strings
+    std::mutex               hist_mu_;
 };
 
 // ── JSON frame builders ───────────────────────────────────────────────────────
@@ -469,9 +501,10 @@ int main() {
         // 6. Composite signal detection (detect_all records bar history internally)
         auto comp_sigs = sig_detector.detect_all(bar, delta_state, vps, vs, active_zones);
 
-        // 7. Broadcast bar_close frame to NT8
+        // 7. Broadcast bar_close frame to NT8 and save for late-joining clients
         auto bar_json = build_bar_close_frame(bar, delta_state, vps, vs,
                                               active_zones, ts, bar_count);
+        broadcaster.store_bar(bar_json);
         broadcaster.broadcast(bar_json);
 
         // 8. Broadcast all signals

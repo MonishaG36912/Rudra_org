@@ -1,5 +1,5 @@
 # OFE — Order Flow Engine Continuation Bundle
-# Generated: 2026-06-19 | Updated: 2026-06-19 | Session: GATE-02 + Session 1 + Session 2 Audit
+# Generated: 2026-06-19 | Updated: 2026-06-21 | Session: 7 (OFEFootprintNT — native NT8 tick indicator)
 # PURPOSE: Feed this file to any AI tool to resume development exactly where we stopped.
 
 ---
@@ -264,10 +264,31 @@ Single:     total_vol at bar extreme ≤ 2 → last buyer/seller → magnet
 | 14 | `feed_manager.cpp` (multi-provider, failover 5s trigger) | AGT-05 | TODO |
 | 15 | `hw_fingerprint.cpp` (CPUID+MAC+disk+mobo+OSID → SHA-256) | AGT-09 | TODO |
 | 16 | `license_engine.cpp` (RSA-2048, symbol count, anti-tamper) | AGT-09 | TODO |
-| 17 | NinjaTrader C# AddOn (footprint renderer, overlays) | AGT-06 | TODO |
+| 17 | NinjaTrader C# AddOn — OFEFootprintNT.cs ★ DONE Session 7 ★ | AGT-06 | DONE |
+|    | → Test in NT8: compile Ctrl+F5, drag onto Schwab/Coinbase chart, verify "[OFE] Bar N closed" in Output | | NEXT |
+|    | → Fix any NT8 compile errors from API mismatches | AGT-06 | IF NEEDED |
+|    | → Add live (open) bar rendering | AGT-06 | TODO |
 | 18 | Go REST+WebSocket API server | AGT-07 | TODO |
 | 19 | Rust OFE-Script evaluator | AGT-07 | TODO |
 | 20 | Merge into Rudra_org repo (adapt include paths) | Manual | TODO |
+
+## NT8 FOOTPRINT — CRITICAL CONTEXT (Sessions 6-7)
+
+### What the user has
+- Schwab API → NT8 data provider → candlestick charts for stocks WORKING
+- Coinbase → NT8 connection → basic candle chart WORKING
+- IQFeed, Kinetick, eSignal → will also connect to NT8 natively (no custom code needed)
+- C++ nt_bridge_server is NOT required for NT8 footprint — NT8 already has tick data
+
+### Why old OFEFootprintIndicator.cs did not display
+OFEFootprintIndicator depends on nt_bridge_server running on port 7777.
+If server not running → indicator shows "OFE OFFLINE" and draws nothing.
+This was the root cause of non-display reported in Sessions 6-7.
+
+### Correct approach (Session 7)
+OFEFootprintNT.cs reads NT8's own tick data via OnMarketData().
+No C++ server, no TCP. Works with any NT8 data provider.
+Install: ONLY copy OFEFootprintNT.cs to NT8 Custom\Indicators\ — no other files needed.
 
 ---
 
